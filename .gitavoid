@@ -1,0 +1,22 @@
+# .gitavoid - guidance file (informational only)
+
+# This repository uses a .gitignore to avoid committing local environment files
+# and secrets. For your convenience, include this file so contributors know to
+# avoid committing sensitive files.
+
+# Do NOT commit the following files/values:
+# - .env (contains API keys such as GROQ_API_KEY)
+# - data/long_term_memory.json (may contain sensitive outputs)
+# - logs/ or outputs/
+
+# To safely set your Groq API key locally (Windows cmd):
+# setx GROQ_API_KEY "<your_key_here>"
+# Then reopen your terminal to pick up the variable.
+
+# For session-only (temporary) variables in current cmd session:
+# set GROQ_API_KEY=<your_key_here>
+
+# On Linux/macOS (bash):
+# export GROQ_API_KEY="<your_key_here>"
+
+# NEVER paste API keys into code or commit them to source control.

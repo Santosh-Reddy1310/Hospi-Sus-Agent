@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs and outputs
+logs/
+outputs/
+*.log
+
+data/long_term_memory.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Environment files
+.env
+.env.local

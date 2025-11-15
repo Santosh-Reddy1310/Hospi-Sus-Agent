@@ -1,0 +1,4 @@
+crewai
+pandas
+requests
+matplotlib
