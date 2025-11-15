@@ -50,579 +50,395 @@ A collaborative multi-agent system where specialized AI agents work together:
 │                     User Interface Layer                     │
 │                  (Kaggle Jupyter Notebook)                   │
 └──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                   Orchestration Layer                        │
-│              (Main Workflow Controller)                      │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-┌───────▼────────┐ ┌──────▼───────┐ ┌───────▼────────┐
-│ Data Collector │ │   Analysis   │ │     Report     │
-│     Agent      │ │     Agent    │ │   Generator    │
-└───────┬────────┘ └──────┬───────┘ └───────┬────────┘
-        │                  │                  │
-        └──────────────────┼──────────────────┘
-                           │
-                  ┌────────▼─────────┐
-                  │  Intervention    │
-                  │ Planner Agent    │
-                  └────────┬─────────┘
-                           │
-        ┌──────────────────┴──────────────────┐
-        │                                     │
-┌───────▼────────┐                   ┌───────▼────────┐
-│ Session Memory │                   │ Long-term      │
-│    Manager     │                   │ Memory Store   │
-└────────────────┘                   └────────────────┘
-```
+                        # Hospi-Sus-Agent — Project Documentation
 
-### 2.2 Component Breakdown
+                        Badges: [CI] [PyPI] [License]  
+                        (Replace these with actual badges when CI / packaging are added.)
 
-#### Core Components:
-1. **Agent Layer**: Four specialized AI agents
-2. **Memory System**: Session and persistent storage
-3. **Utilities**: Logging, evaluation, data processing
-4. **Data Layer**: CSV files, API integrations
+                        This repository contains a modular, multi-agent system for hospital sustainability analysis. It is designed for both interactive experimentation (notebooks / Kaggle) and automated batch runs. The system ingests operational data (energy, water, waste), performs analyses (statistics, trends, anomalies), produces narrative and visual reports, and recommends prioritized interventions.
 
-### 2.3 Data Flow
+                        Table of contents
 
-```
-Input Data → Data Collector → Analysis Agent → Report Generator
-                                      ↓
-                            Intervention Planner
-                                      ↓
-                              Recommendations
-```
+                        - 1. Project overview
+                        - 2. Quick start (local)
+                        - 3. Configuration and environment variables
+                        - 4. Data format and schema
+                        - 5. Agents: API and behavior
+                        - 6. Orchestrator and workflow
+                        - 7. Outputs, persistence, and memory
+                        - 8. Development & testing
+                        - 9. Packaging for Kaggle
+                        - 10. Security, secrets, and safe development
+                        - 11. Contributing, license, and contact
 
----
+                        ---
 
-## 3. Technical Specifications
+                        1. Project overview
+                        -------------------
+                        Purpose: provide operational analytics and recommendations to help hospitals reduce energy, water, waste, and carbon emissions. The system targets facility managers, sustainability teams, and researchers.
 
-### 3.1 Technology Stack
+                        Key goals:
 
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| Runtime Environment | Kaggle Notebooks | Latest |
-| Programming Language | Python | 3.10+ |
-| AI Framework | CrewAI | Latest |
-| Data Processing | Pandas | 1.5+ |
-| Visualization | Matplotlib, Seaborn | Latest |
-| API Handling | Requests | Latest |
-| Testing | Pytest (optional) | Latest |
+                        - Enable reproducible, offline runs (no external API required) for Kaggle and CI.
+                        - Allow optional LLM-powered agents for richer narrative outputs when credentials are provided.
+                        - Provide a clear extension path: add data sources, custom analyses, or alternative output formats.
 
-### 3.2 System Requirements
+                        2. Quick start (local)
+                        ----------------------
+                        Requirements: Python 3.10+ (3.11/3.12 tested), Git.
 
-**Hardware (Kaggle Provided)**:
-- CPU: 4 cores minimum
-- RAM: 16GB
-- Storage: 20GB disk space
+                        Install and run with local fallbacks (recommended for first run):
 
-**Software Dependencies**:
-crewai>=0.1.0
-pandas>=1.5.0
-matplotlib>=3.5.0
-seaborn>=0.12.0
-requests>=2.28.0
-facility_id, date, electricity_kwh, natural_gas_therms, water_gallons, 
-waste_kg, recycling_kg, carbon_emissions_kg
-```
+                        ```cmd
+                        python -m venv .venv
+                        .venv\Scripts\python -m pip install --upgrade pip
+                        .venv\Scripts\python -m pip install -r requirements.txt
 
-**Emissions Factors** (`emissions_factors.csv`):
-```
+                        set ENABLE_LLM=0
+                        .venv\Scripts\python main.py
+                        ```
+
+                        Notes:
+
+                        - `ENABLE_LLM=0` forces local deterministic agents (no network calls). Use this in CI and Kaggle.
+                        - To enable LLM agents set `ENABLE_LLM=1` and the provider env var (see Section 3).
+
+                        3. Configuration and environment variables
+                        ----------------------------------------
+                        Runtime options are configured through environment variables. The project uses a small set of well-named variables.
+
+                        - `ENABLE_LLM` (0 or 1) — Enable LLM-powered agents. Default: `0`.
+                        - `LLM_PROVIDER` — `openai` or `groq`. Default: `openai`.
+                        - `OPENAI_API_KEY` / `GROQ_API_KEY` — Provider-specific keys. Provide only in your local environment or CI secrets manager.
+
+                        Examples (Windows cmd.exe):
+
+                        ```cmd
+                        set ENABLE_LLM=1
+                        set LLM_PROVIDER=openai
+                        set OPENAI_API_KEY=sk-xxx
+                        .venv\Scripts\python main.py
+                        ```
+
+                        The project includes `scripts/save_key.py` which prompts for a key and writes a local `.env` file (this file is ignored by git by default). Do not commit `.env`.
+
+                        4. Data format and schema
+                        -------------------------
+                        The DataCollector accepts CSV files with common hospital operational fields. The DataCollector implements an alias mapping to support variations in column names.
+
+                        Canonical column names used internally (preferred):
+
+                        - `date` — ISO date string or parseable date
+                        - `electricity_kwh` — energy in kWh
+                        - `water_gallons` — water usage in gallons (if `water_liters` present it is converted)
+                        - `carbon_emissions_kg` — emissions in kg CO2
+                        - `waste_kg`, `recycling_kg` — waste metrics
+                        - `facility_id` — optional string identifier
+
+                        Common aliases supported (examples):
+
+                        - `energy_usage_kwh` -> `electricity_kwh`
+                        - `water_usage_liters` -> `water_gallons` (converted)
+                        - `emissions_kgco2` -> `carbon_emissions_kg`
+
+                        If your dataset uses different names, either rename columns before running or extend `agents/data_collector.py` alias mapping.
+
+                        5. Agents: API and behavior
+                        ---------------------------
+                        Each agent exposes a single main entry `run(inputs: dict) -> dict` where `inputs` is a context dictionary and the return value is a structured result including `status` and output data.
+
+                        Agent contract (short):
+
+                        - Input: `dict` with keys documented per agent (or the orchestrator will populate defaults).
+                        - Output: `dict` with at least `status: 'success'|'error'` and a `data` key with structured results.
+
+                        Detailed agent descriptions:
+
+                        - DataCollectorAgent (`agents/data_collector.py`)
+                            - Purpose: load CSV or API, validate schema, alias & normalize columns, add derived fields like `day_of_week`, and return `pandas.DataFrame`-serializable data plus a validation report.
+                            - Important behavior: will not overwrite canonical columns; maps aliases only when canonical is absent and drops original columns after safe conversion to avoid duplicates.
+
+                        - AnalysisAgent (`agents/analysis_agent.py`)
+                            - Purpose: compute summary statistics, detect trends and anomalies, compute efficiency metrics (e.g., energy per bed or per floor area), and compute carbon intensity metrics.
+                            - Output: nested dict with `summary_statistics`, `trend_analysis`, `anomalies` and `efficiency_metrics`.
+
+                        - ReportGeneratorAgent (`agents/report_generator.py`)
+                            - Purpose: generate plain-text executive summary, human-readable report, and visualizations (PNG files saved to `outputs/`).
+                            - Output: `report_text`, `executive_summary`, and `visual_paths`.
+
+                        - InterventionPlannerAgent (`agents/intervention_planner.py`)
+                            - Purpose: suggest prioritized interventions and an implementation roadmap based on analysis outputs. Ranks interventions by impact and cost heuristics.
+
+                        6. Orchestrator and workflow
+                        ----------------------------
+                        `main_workflow.py` coordinates the following steps:
+
+                        1. Data ingestion (DataCollector)
+                        2. Analysis (AnalysisAgent)
+                        3. Report generation (ReportGenerator)
+                        4. Intervention planning (InterventionPlanner)
+                        5. Persist run snapshot to `data/long_term_memory.json`
+
+                        The orchestrator is robust: when `ENABLE_LLM=0` or provider keys are missing it uses local deterministic agent implementations that do not make network calls. This makes it CI- and Kaggle-friendly.
+
+                        Run the orchestrator directly:
+
+                        ```cmd
+                        set ENABLE_LLM=0
+                        .venv\Scripts\python main.py
+                        ```
+
+                        7. Outputs, persistence and memory
+                        ---------------------------------
+                        - `outputs/` — PNG visualizations and any generated attachments. This folder is git-ignored by default.
+                        - `data/long_term_memory.json` — JSON file storing run snapshots (timestamp, analysis, paths to visuals). Useful for tracking progress across runs.
+                        - `logs/workflow.log` — log file with detailed run information.
+
+                        8. Development & testing
+                        ------------------------
+                        Run unit tests with `pytest` (recommended inside `.venv`).
+
+                        ```cmd
+                        .venv\Scripts\python -m pip install -r requirements-dev.txt  # if present
+                        .venv\Scripts\pytest -q
+                        ```
+
+                        Suggested CI (GitHub Actions):
+
+                        - On push/PR: set `ENABLE_LLM=0`, install dependencies, run `pytest`, and run `python main.py` once to validate end-to-end non-LLM behavior.
+
+                        9. Packaging for Kaggle
+                        ----------------------
+                        Tips to prepare a Kaggle Notebook / kernel:
+
+                        1. Ensure `ENABLE_LLM=0` in the notebook environment.
+                        2. Attach the dataset to the kernel; CSV will be available at `/kaggle/input/<dataset>/hospital_energy.csv`.
+                        3. Write `outputs/` to `/kaggle/working/outputs` to allow downloads.
+                        4. Keep external network calls disabled.
+
+                        Example notebook cell to run the orchestrator inside Kaggle:
+
+                        ```python
+                        import os
+                        os.environ['ENABLE_LLM'] = '0'
+                        !python main.py
+                        ```
+
+                        10. Security, secrets, and safe development
+                        ----------------------------------------
+                        - Never commit API keys or `.env` to the repository. `.gitignore` excludes `.env` by default.
+                        - Use `scripts/save_key.py` to store a key locally for development only (it writes `.env` which is ignored).
+                        - For CI, store provider keys in the CI secrets manager and ensure workflows only enable `ENABLE_LLM=1` when secrets are present.
+
+                        11. Contributing, license, and contact
+                        -------------------------------------
+                        Contributing:
+
+                        - Open issues for bugs or feature requests.
+                        - Create small focused PRs; add tests for new behavior.
+
+                        License:
+
+                        - Add a `LICENSE` file (MIT recommended). If you'd like, I can add a draft MIT license now.
+
+                        Contact:
+
+                        - Repository: `https://github.com/Santosh-Reddy1310/Hospi-Sus-Agent`
+                        - Open an issue or PR for questions and contributions.
+
+                        Appendix: file map
+
+                        - `main.py` — entrypoint invoking the orchestrator
+                        - `main_workflow.py` — orchestrator and local fallback logic
+                        - `agents/` — implementation files for each agent
+                        - `data/` — sample dataset and `long_term_memory.json`
+                        - `outputs/` — generated visualizations (ignored)
+                        - `logs/` — runtime logs (ignored)
+                        - `scripts/save_key.py` — interactive helper to save env keys locally (ignored by git)
+
+                        Next steps I can take for you
+                        ----------------------------
+                        - Add a GitHub Actions workflow that runs `pytest` and a non-LLM full run on PRs/pushes.
+                        - Produce a Kaggle-ready notebook `capstone_agent_kaggle.ipynb` tuned for `/kaggle/input` and `/kaggle/working/outputs`.
+                        - Add a `LICENSE` (MIT) and `CONTRIBUTING.md` template.
+
+                        Tell me which of these you'd like me to do next. I can also commit and push this README update to `origin/main` if you want me to.
+                        ---
+
+                        Project overview
+                        ----------------
+                        The Hospi-Sus-Agent is designed to help facility managers and sustainability teams:
+
+                        - Ingest operational data (energy, water, waste) from CSVs or APIs
+                        - Produce automated analyses: summary statistics, trends, anomalies
+                        - Generate visual and narrative reports suitable for leadership
+                        - Propose prioritized, actionable interventions and an implementation roadmap
+
+                        The system is intentionally modular so components can be replaced, extended, or run in restricted environments (e.g., Kaggle kernels) without network access.
+
+                        Architecture and components
+                        ---------------------------
+                        High-level layers:
+
+                        - Orchestrator (main_workflow.py): coordinates the entire workflow and persists results
+                        - Agent layer: four specialized agents
+                            - DataCollectorAgent — ingestion, validation, enrichment
+                            - AnalysisAgent — stats, trends, anomalies, comparisons
+                            - ReportGeneratorAgent — text & visual reporting
+                            - InterventionPlannerAgent — recommendations and roadmap
+                        - Memory layer: SessionMemory (ephemeral) and LongTermMemory (JSON persistence)
+                        - Utilities: plotting, evaluation, helpers
+
+                        Design choices:
+
+                        - Agents are implemented as CrewAI-compatible classes when LLM is enabled, but the orchestrator provides local, deterministic fallbacks so runs are reproducible without API keys.
+                        - Data enrichment normalizes common column name variants (e.g., `energy_usage_kwh` → `electricity_kwh`) and performs safe unit conversions.
+                        - Persistent outputs are stored under `outputs/` (visuals) and `data/long_term_memory.json` (JSON snapshots).
+
+                        Installation & quick start (local)
+                        ---------------------------------
+                        Prerequisites: Python 3.10+ recommended. Create a virtual environment and install dependencies.
+
+                        Windows (cmd.exe):
+
+                        ```cmd
+                        python -m venv .venv
+                        .venv\Scripts\python -m pip install --upgrade pip
+                        .venv\Scripts\python -m pip install -r requirements.txt
+                        ```
+
+                        Run the pipeline using local fallbacks (no API keys required):
+
+                        ```cmd
+                        set ENABLE_LLM=0
+                        .venv\Scripts\python main.py
+                        ```
+
+                        If you want LLM-powered agents (optional), set `ENABLE_LLM=1` and provide the provider-specific API key as described in the Security section.
+
+                        Running (examples)
+                        -------------------
+                        1) Full orchestrator (default):
+
+                        ```cmd
+                        set ENABLE_LLM=0           # or 1 to enable LLMs
+                        set LLM_PROVIDER=groq      # or openai
+                        set GROQ_API_KEY=...       # if using groq and ENABLE_LLM=1
+                        .venv\Scripts\python main.py
+                        ```
+
+                        2) Use the included local helper to store keys in `.env` (ignored by git):
+
+                        ```cmd
+                        .venv\Scripts\python scripts\save_key.py
+                        ```
+
+                        Data format and sample dataset
+                        ------------------------------
+                        The sample CSV `data/hospital_energy.csv` contains daily records with these common fields:
+
+                        - `date` — ISO date
+                        - `energy_usage_kwh` or `electricity_kwh` — daily electricity usage in kWh
+                        - `water_usage_liters` or `water_gallons` — water usage (liters will be converted to gallons)
+                        - `emissions_kgco2` or `carbon_emissions_kg` — calculated emissions in kg CO2
+                        - `waste_kg`, `recycling_kg` — waste and recycling weights
+                        - `facility_id` — optional facility identifier
+
+                        The DataCollector normalizes known variants (aliases) and adds derived columns when possible (e.g., `total_energy_mwh`, `recycling_rate`). If your dataset uses different column names, either rename them or extend the alias mapping in `agents/data_collector.py`.
+
+                        Agents — design and details
+                        ---------------------------
+                        Each agent focuses on a single concern. Agents expose a `run(inputs: dict)` method and return a structured dict (`status`, keys, and data). Below are concise descriptions and internal behavior.
+
+                        1) DataCollectorAgent
+                        - Responsibilities: load CSV or API, validate schema, normalize columns, enrich data (date parsing, day_of_week), and return both data and a validation report.
+                        - Key functions: `load_csv_data(filepath)`, `validate_data(df)`, `enrich_data(df)`.
+                        - Behavior notes: the agent will not overwrite canonical columns; instead it maps aliases only when the canonical name is not present. Unit conversions (e.g., liters→gallons) are safe and the original liters column is dropped to avoid duplicate column names.
+
+                        2) AnalysisAgent
+                        - Responsibilities: compute summary statistics (mean, median, std, min, max, total), identify time trends (percentage change first→last), detect anomalies using statistical thresholds, compare facilities, and compute efficiency metrics like energy intensity.
+                        - Output: a nested `analysis` dict containing `summary_statistics`, `trend_analysis`, `anomaly_detection`, `facility_comparison`, `carbon_intensity`, `efficiency_metrics`.
+
+                        3) ReportGeneratorAgent
+                        - Responsibilities: produce an executive summary (plain text), a longer textual report, and visualizations. Visualizations are saved to `outputs/` as PNG files and returned as a list of paths.
+                        - Notes: plotting is robust to environments that lack optional styles (tries `seaborn` then falls back to `ggplot` or defaults).
+
+                        4) InterventionPlannerAgent
+                        - Responsibilities: produce prioritized recommendations and a phased implementation roadmap. The planner uses analysis outputs to suggest quick wins and further investigations for anomalies.
+
+                        Memory, persistence and outputs
+                        -------------------------------
+                        - SessionMemory: lightweight, kept in-process for the run, useful for debugging and short-term context.
+                        - LongTermMemory: JSON-backed store at `data/long_term_memory.json` which remembers workflow runs with timestamps. Use this to persist results across runs.
+                        - Visual outputs: PNGs are placed in `outputs/`. Long-term memory references these file paths.
+
+                        Logging, diagnostics and troubleshooting
+                        --------------------------------------
+                        - Logging: configured in `main_workflow.py` to write to `logs/workflow.log` and stdout. `logs/` is in `.gitignore` by default.
+                        - Common issues:
+                            - CrewAI import / LLM errors: ensure `ENABLE_LLM=0` or set provider key env vars.
+                            - Duplicate columns warning: occurs when input CSV contains both original and normalized columns (DataCollector now prevents this).
+                            - Plot style errors: matplotlib style fallback logic is present.
+
+                        Security and secrets handling (GROQ/OpenAI keys)
+                        -----------------------------------------------
+                        This project intentionally avoids storing secrets in code or repository files.
+
+                        - `.env.example` shows the environment variables you can set locally (do NOT copy real keys into the repo).
+                        - `.gitignore` includes `.env` to prevent accidental commits.
+                        - Use the included helper `scripts/save_key.py` to safely write a local `.env` (it uses `getpass` so the key is not echoed). The `.env` file is ignored by git.
+                        - If a key is accidentally exposed, rotate it immediately with the provider.
+
+                        Provider selection and env variable mapping
+                        - `LLM_PROVIDER` controls which provider the orchestrator attempts to use (supported: `openai`, `groq`).
+                        - Mapped env vars:
+                            - `openai` → `OPENAI_API_KEY`
+                            - `groq` → `GROQ_API_KEY`
+
+                        The orchestrator will only attempt to initialize CrewAI agents if `ENABLE_LLM=1` and the provider's API key env var is present; otherwise it falls back to local implementations.
+
+                        Packaging for Kaggle
+                        --------------------
+                        To prepare for Kaggle:
+
+                        1. Ensure `ENABLE_LLM=0` in the notebook environment (Kaggle kernels do not provide external API keys by default).
+                        2. Place `hospital_energy.csv` in a Kaggle dataset and attach it to the notebook (accessible at `/kaggle/input/<dataset>/hospital_energy.csv`).
+                        3. Update paths for outputs to `/kaggle/working/outputs` if you want the generated images to be downloadable after the run.
+                        4. Keep the notebook self-contained: install only necessary packages and avoid network calls.
+
+                        Testing and CI
+                        --------------
+                        There are basic tests in `tests/` that exercise agent logic and an integration-style workflow test. Recommended CI (GitHub Actions):
+
+                        - Install Python and dependencies
+                        - Run `pytest` and also run `python main.py` with `ENABLE_LLM=0` to ensure the non-LLM path works in CI
+
+                        If you'd like, I can add a `.github/workflows/python-tests.yml` workflow that runs on push and PRs.
+
+                        Contributing and license
+                        ------------------------
+                        - Contributions: open issues or PRs. Keep changes small and include tests.
+                        - Code style: follow standard Python style (PEP8). Add type hints where possible.
+                        - License: if you plan to publish, add a `LICENSE` file (MIT recommended). I can add one for you.
+
+                        Appendix — file map (key files)
+
+                        - `main.py` — thin runner that starts the orchestrator
+                        - `main_workflow.py` — orchestrator, LLM guard and local fallbacks
+                        - `agents/` — `data_collector.py`, `analysis_agent.py`, `report_generator.py`, `intervention_planner.py`
+                        - `utils/` — `memory.py`, `evaluation.py`
+                        - `data/` — `hospital_energy.csv`, `long_term_memory.json`
+                        - `outputs/` — produced PNG visualizations (ignored by git by default)
+                        - `scripts/save_key.py` — interactive helper to write `.env`
+                        - `tests/` — unit and integration tests
+
+                        Contact / next steps
+                        --------------------
+                        If you want, I can now:
+
+                        1. Add GitHub Actions CI to run tests and the non-LLM run automatically. (Recommended.)
+                        2. Build a Kaggle-ready notebook and tune `requirements.txt` for Kaggle compatibility.
+                        3. Add a license (MIT) and a CONTRIBUTING guide.
+
+                        Tell me which next step you'd like and I'll implement it and validate the changes locally.
 energy_source, emission_factor_kg_co2_per_unit, region
-```
-
----
-
-## 4. Implementation Guide
-
-### 4.1 Phase 1: Environment Setup (Day 1)
-
-#### Step 1: Create Kaggle Notebook
-1. Log into Kaggle
-2. Create new notebook: "Healthcare Sustainability AI Agent"
-3. Enable GPU/TPU (optional, for future ML models)
-
-#### Step 2: Install Dependencies
-```python
-# Cell 1: Install packages
-!pip install -q crewai requests pandas matplotlib seaborn scikit-learn
-
-# Cell 2: Verify installation
-import crewai
-import pandas as pd
-import matplotlib.pyplot as plt
-print("✓ All packages installed successfully")
-```
-
-#### Step 3: Create Project Structure
-```python
-# Cell 3: Setup directory structure
-import os
-
-directories = [
-    'agents',
-    'data',
-    'utils',
-    'outputs',
-    'logs'
-]
-
-for directory in directories:
-    os.makedirs(directory, exist_ok=True)
-    print(f"✓ Created {directory}/ directory")
-```
-
-### 4.2 Phase 2: Data Preparation (Day 1-2)
-#### Create Sample Dataset
-```python
-%%writefile data/hospital_energy.csv
-facility_id,date,electricity_kwh,natural_gas_therms,water_gallons,waste_kg,recycling_kg,carbon_emissions_kg
-HOSP001,2024-01-01,15000,800,50000,1200,300,8500
-HOSP001,2024-01-02,14500,820,48000,1150,320,8300
-HOSP001,2024-01-03,16000,780,52000,1300,280,8800
-HOSP002,2024-01-01,12000,600,40000,900,250,6500
-HOSP002,2024-01-02,11800,620,39000,920,260,6400
-```
-
-### 4.3 Phase 3: Build Agents (Day 3-7)
-
-(Agent code samples provided — DataCollector, AnalysisAgent, ReportGenerator, InterventionPlanner — are included in the project under `agents/`.)
-
-[See project `agents/` folder for full implementations.]
-
-### 4.4 Phase 4: Memory System (Day 8-9)
-
-(Session and LongTerm memory implementations described; see `utils/memory.py`.)
-
-### 4.5 Phase 5: Orchestration & Testing (Day 10-14)
-
-(Main orchestrator sample provided as `main_workflow.py`.)
-
-
-## 5. Agent Specifications
-
-### 5.1 Data Collector Agent
-
-**Purpose**: Gather sustainability data from multiple sources
-
-**Inputs**:
-- Data file paths
-- API endpoints (future enhancement)
-- Configuration parameters
-
-**Outputs**:
-- Cleaned dataset
-- Validation report
-- Data quality metrics
-
-**Key Methods**:
-- `load_csv_data()`: Parse CSV files
-- `validate_data()`: Check data quality
-- `enrich_data()`: Add calculated fields
-
-### 5.2 Analysis Agent
-
-**Purpose**: Identify patterns, trends, and anomalies
-
-**Inputs**:
-- Collected data from Data Collector
-
-**Outputs**:
-- Summary statistics
-- Anomaly detection results
-- Facility comparisons
-- Efficiency metrics
-
-**Key Methods**:
-- `calculate_summary_stats()`: Statistical analysis
-- `analyze_trends()`: Time-series analysis
-- `detect_anomalies()`: Outlier identification
-- `calculate_carbon_intensity()`: Emissions metrics
-
-### 5.3 Report Generator Agent
-
-**Purpose**: Create comprehensive visual and text reports
-
-**Inputs**:
-- Analysis results
-- Raw data for visualizations
-**Outputs**:
-- Executive summary
-- Detailed text report
-- `create_text_report()`: Detailed findings
-
-### 5.4 Intervention Planner Agent
-
-**Purpose**: Recommend actionable sustainability improvements
-
-**Inputs**:
-- Analysis results
-
-**Outputs**:
-- Prioritized recommendations
-- Implementation roadmap
-- Cost-benefit estimates
-
-**Key Methods**:
-- `generate_recommendations()`: Create intervention list
-- `prioritize_interventions()`: Rank by impact
-- `create_implementation_roadmap()`: Phased plan
-
----
-
-## 6. Testing & Evaluation
-
-### 6.1 Unit Testing
-
-Create test file: `tests/test_agents.py`
-
-```python
-import unittest
-import pandas as pd
-from agents.data_collector import DataCollectorAgent
-from agents.analysis_agent import AnalysisAgent
-
-class TestDataCollector(unittest.TestCase):
-    
-    def setUp(self):
-        self.agent = DataCollectorAgent()
-    
-    def test_data_loading(self):
-        """Test CSV data loading"""
-        result = self.agent.run({'data_path': 'data/hospital_energy.csv'})
-        self.assertEqual(result['status'], 'success')
-        self.assertGreater(result['record_count'], 0)
-    
-    def test_data_validation(self):
-        """Test data validation logic"""
-        df = pd.DataFrame({
-            'facility_id': ['A', 'B'],
-            'electricity_kwh': [1000, 2000]
-        })
-        validation = self.agent.validate_data(df)
-        self.assertIn('total_records', validation)
-        self.assertEqual(validation['total_records'], 2)
-
-class TestAnalysisAgent(unittest.TestCase):
-    
-    def setUp(self):
-        self.agent = AnalysisAgent()
-    
-    def test_summary_statistics(self):
-        """Test statistical calculations"""
-        df = pd.DataFrame({
-            'electricity_kwh': [1000, 1500, 2000]
-        })
-        stats = self.agent.calculate_summary_stats(df)
-        self.assertIn('electricity_kwh', stats)
-        self.assertEqual(stats['electricity_kwh']['mean'], 1500.0)
-
-if __name__ == '__main__':
-    unittest.main()
-```
-
-### 6.2 Integration Testing
-
-```python
-%%writefile tests/test_workflow.py
-
-def test_full_workflow():
-    """Test complete agent workflow"""
-    orchestrator = SustainabilityAgentOrchestrator()
-    results = orchestrator.run_full_workflow('data/hospital_energy.csv')
-    
-    assert results['status'] == 'success', "Workflow should complete successfully"
-    assert 'analysis' in results, "Should contain analysis results"
-    assert 'report' in results, "Should contain report"
-    assert 'interventions' in results, "Should contain recommendations"
-    
-    print("✓ All integration tests passed")
-
-test_full_workflow()
-```
-
-### 6.3 Evaluation Metrics
-
-```python
-%%writefile utils/evaluation.py
-import time
-
-class WorkflowEvaluator:
-    """Evaluate agent system performance"""
-    
-    def __init__(self):
-        self.metrics = {}
-    
-    def evaluate_accuracy(self, results):
-        """Measure accuracy of analysis"""
-        analysis = results.get('analysis', {}).get('analysis', {})
-        
-        # Check completeness
-        required_sections = [
-            'summary_statistics',
-            'trend_analysis',
-            'anomaly_detection',
-            'efficiency_metrics'
-        ]
-        
-        completed = sum(1 for section in required_sections if section in analysis)
-        accuracy_score = (completed / len(required_sections)) * 100
-        
-        self.metrics['accuracy'] = accuracy_score
-        return accuracy_score
-    
-    def evaluate_performance(self, start_time, end_time):
-        """Measure execution time"""
-        execution_time = end_time - start_time
-        self.metrics['execution_time_seconds'] = execution_time
-        
-        # Performance rating
-        if execution_time < 10:
-            rating = "Excellent"
-        elif execution_time < 30:
-            rating = "Good"
-        else:
-            rating = "Needs Optimization"
-        
-        self.metrics['performance_rating'] = rating
-        return rating
-    
-    def evaluate_coverage(self, results):
-        """Check data coverage"""
-        data = results.get('data_collection', {}).get('data', [])
-        coverage_score = len(data) / 100 * 100  # Assuming 100 is ideal
-        
-        self.metrics['data_coverage'] = min(coverage_score, 100)
-        return self.metrics['data_coverage']
-    
-    def generate_report(self):
-        """Generate evaluation summary"""
-        report = "\n=== EVALUATION REPORT ===\n"
-        for metric, value in self.metrics.items():
-            report += f"{metric}: {value}\n"
-        return report
-```
-
----
-
-## 7. Deployment Instructions
-
-### 7.1 Pre-Deployment Checklist
-
-- [ ] All agents tested individually
-- [ ] Integration tests passing
-- [ ] Sample data uploaded to Kaggle
-- [ ] Documentation complete
-- [ ] Code comments added
-- [ ] Visualizations generated successfully
-- [ ] Memory systems functional
-- [ ] Logging configured properly
-
-### 7.2 Kaggle Submission Steps
-
-1. **Organize Notebook**:
-   - Clean up all code cells
-   - Add markdown explanations
-   - Include results/outputs
-   - Add project overview at top
-
-2. **Upload Data**:
-   - Go to "Data" tab in Kaggle notebook
-   - Upload `hospital_energy.csv`
-   - Verify file paths in code
-
-3. **Run Complete Workflow**:
-```python
-# Final execution cell
-orchestrator = SustainabilityAgentOrchestrator()
-results = orchestrator.run_full_workflow()
-orchestrator.display_results(results)
-
-# Evaluate performance
-from utils.evaluation import WorkflowEvaluator
-
-start_time = __import__('time').time()
-# run workflow
-end_time = __import__('time').time()
-evaluator = WorkflowEvaluator()
-print(evaluator.generate_report())
-```
-
-4. **Add Documentation Cell**:
-```markdown
-# Project Documentation
-
-## Overview
-[Your project description]
-
-## Architecture
-[System design explanation]
-
-## Results
-[Key findings and metrics]
-
-## Demo Video
-[YouTube link if applicable]
-```
-
-5. **Save & Publish**:
-   - Click "Save Version"
-   - Add commit message
-   - Make notebook public
-   - Submit to competition
-
-### 7.3 Video Demo Script
-
-**Duration**: 3-5 minutes
-
-**Structure**:
-1. Introduction (30s) - Project overview
-2. Architecture (1min) - Explain multi-agent system
-3. Live Demo (2min) - Run workflow, show outputs
-4. Results (1min) - Highlight key findings
-5. Conclusion (30s) - Impact and future work
-
----
-
-## 8. Future Enhancements
-
-### 8.1 Short-term (1-2 months)
-
-1. **Real-time Data Integration**
-   - Connect to live hospital APIs
-   - Implement streaming data processing
-   
-2. **Advanced ML Models**
-   - Predictive analytics for energy usage
-   - Anomaly detection with neural networks
-
-3. **Interactive Dashboard**
-   - Streamlit or Dash visualization
-   - Real-time monitoring
-
-### 8.2 Long-term (3-6 months)
-
-1. **Multi-facility Management**
-   - Centralized monitoring system
-   - Comparative benchmarking
-
-2. **Automated Intervention Execution**
-   - Integration with building management systems
-   - Automated energy optimization
-
-3. **Carbon Credit Tracking**
-   - Blockchain-based verification
-   - Financial impact analysis
-
----
-
-## 9. Troubleshooting Guide
-
-### Common Issues
-
-**Issue**: ImportError for CrewAI
-**Solution**: Reinstall: `!pip install --upgrade crewai`
-
-**Issue**: Visualization not displaying
-**Solution**: Add `plt.show()` or save to file first
-
-**Issue**: Memory overflow
-**Solution**: Process data in chunks using `pd.read_csv(chunksize=1000)`
-
-**Issue**: Long execution time
-**Solution**: Optimize data processing, use vectorized operations
-
----
-
-## 10. References & Resources
-
-- CrewAI Documentation: https://docs.crewai.com
-- Pandas Documentation: https://pandas.pydata.org
-- Healthcare Sustainability Guidelines: EPA ENERGY STAR
-- Carbon Accounting Standards: GHG Protocol
-
----
-
-## Appendix A: Complete File Structure
-
-```
-capstone_agent/
-├── capstone_agent.ipynb      # Main notebook
-├── agents/
-│   ├── __init__.py
-│   ├── data_collector.py
-│   ├── analysis_agent.py
-│   ├── report_generator.py
-│   └── intervention_planner.py
-├── data/
-│   ├── hospital_energy.csv
-│   └── long_term_memory.json
-├── utils/
-│   ├── __init__.py
-│   ├── memory.py
-│   ├── evaluation.py
-│   └── toolkit.py
-├── outputs/
-│   ├── energy_consumption_trend.png
-│   ├── emissions_by_facility.png
-│   └── recycling_distribution.png
-├── logs/
-│   └── workflow.log
-├── tests/
-│   ├── test_agents.py
-│   └── test_workflow.py
-├── main_workflow.py
-└── README.md
-```
-
-## Appendix B: Sample Output
-
-```
-================================================================================
-HEALTHCARE FACILITY SUSTAINABILITY REPORT
-Generated: 2024-11-15 10:30:45
-================================================================================
-
-=== EXECUTIVE SUMMARY ===
-
-Total Carbon Emissions: 41,500 kg CO2
-Average Daily Emissions: 8,300 kg CO2
-
-Key Trends:
-  • electricity_kwh: Increasing by 6.7%
-  • carbon_emissions_kg: Increasing by 3.5%
-  • recycling_rate: Decreasing by 6.7%
-
-Efficiency Metrics:
-  • Energy Intensity Kwh Per Sqft: 0.148
-  • Waste Diversion Rate: 21.05%
-  • Water Usage Per Day: 47,800.00
-
-================================================================================
-RECOMMENDED INTERVENTIONS
-================================================================================
-
-1. Transition to Renewable Energy Sources
-   Category: Renewable Energy
-   Impact: Very High | Cost: High | Timeline: 6-12 months
-   Purchase renewable energy credits or install on-site solar panels
-   Expected Savings: 50-100% reduction in Scope 2 emissions
-
-2. Optimize HVAC System Operations
-   Category: Energy Efficiency
-   Impact: High | Cost: Medium | Timeline: 2-4 months
-   Install smart thermostats and implement schedule-based controls
-   Expected Savings: 15-25% reduction in heating/cooling costs
-
-[... additional recommendations ...]
-```
-
----
-
-**Document Version**: 1.0  
-**Last Updated**: November 15, 2024  
-**Author**: AI Agent Development Team  
-**Status**: Production Ready
