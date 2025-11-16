@@ -81,9 +81,41 @@ class SustainabilityAgentOrchestrator:
                 try:
                     data_path = inputs.get('data_path', 'data/hospital_energy.csv')
                     df = pd.read_csv(data_path)
+
+                    rename_map = {}
+                    if 'facility_id' in df.columns and 'facility' not in df.columns:
+                        rename_map['facility_id'] = 'facility'
+                    if 'facility_name' in df.columns and 'facility' not in rename_map and 'facility' not in df.columns:
+                        rename_map['facility_name'] = 'facility'
+                    if rename_map:
+                        df = df.rename(columns=rename_map)
+
+                    if 'energy_usage_kwh' in df.columns and 'electricity_kwh' not in df.columns:
+                        df['electricity_kwh'] = df['energy_usage_kwh']
+                    if 'emissions_kgco2' in df.columns and 'carbon_emissions_kg' not in df.columns:
+                        df['carbon_emissions_kg'] = df['emissions_kgco2']
+
                     # Basic enrich: convert water liters if present
                     if 'water_usage_liters' in df.columns and 'water_gallons' not in df.columns:
                         df['water_gallons'] = df['water_usage_liters'] * 0.264172
+
+                    if 'date' in df.columns:
+                        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                        df['date'] = df['date'].dt.strftime('%Y-%m-%d')
+
+                    numeric_columns = [
+                        'electricity_kwh',
+                        'energy_usage_kwh',
+                        'carbon_emissions_kg',
+                        'emissions_kgco2',
+                        'water_usage_liters',
+                        'water_gallons',
+                        'operational_hours'
+                    ]
+                    for column in numeric_columns:
+                        if column in df.columns:
+                            df[column] = pd.to_numeric(df[column], errors='coerce')
+
                     self.logger.info(f"Loaded {len(df)} records from {data_path}")
                     return {
                         'status': 'success',

@@ -2,3 +2,4 @@ crewai
 pandas
 requests
 matplotlib
+streamlit
